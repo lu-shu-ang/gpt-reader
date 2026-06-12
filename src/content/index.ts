@@ -91,7 +91,10 @@ class ChatGptReader {
     this.observeSettings();
     window.addEventListener("scroll", this.queueActiveUpdate, { passive: true });
     window.addEventListener("resize", this.queueActiveUpdate, { passive: true });
-    document.addEventListener("scroll", this.queueActiveUpdate, { passive: true, capture: true });
+    document.addEventListener("scroll", this.handleDocumentScroll, {
+      passive: true,
+      capture: true
+    });
   }
 
   private ensureShell(): void {
@@ -303,6 +306,14 @@ class ChatGptReader {
     });
   };
 
+  private handleDocumentScroll = (event: Event): void => {
+    if (this.root && event.target instanceof Node && this.root.contains(event.target)) {
+      return;
+    }
+
+    this.queueActiveUpdate();
+  };
+
   private updateActiveFromScroll(): void {
     if (performance.now() < this.suppressActiveSyncUntil) {
       this.positionActiveDot();
@@ -493,14 +504,14 @@ class ChatGptReader {
       return;
     }
 
-    const activeButton = this.list.querySelector<HTMLElement>(".gpt-reader-heading.is-active");
-    if (!activeButton) {
+    const activeItem = this.getActiveListItem();
+    if (!activeItem) {
       this.activeDot.style.opacity = "0";
       return;
     }
 
     const listRect = this.list.getBoundingClientRect();
-    const activeRect = activeButton.getBoundingClientRect();
+    const activeRect = activeItem.getBoundingClientRect();
     const top = Math.max(6, activeRect.top - listRect.top + activeRect.height / 2);
     this.activeDot.style.opacity = "1";
     this.activeDot.style.transform = `translateY(${top}px)`;
@@ -511,15 +522,26 @@ class ChatGptReader {
       return;
     }
 
-    const activeButton = this.list.querySelector<HTMLElement>(".gpt-reader-heading.is-active");
-    if (!activeButton) {
+    const activeItem = this.getActiveListItem();
+    if (!activeItem) {
       return;
     }
 
     const nextScrollTop =
-      activeButton.offsetTop - this.list.clientHeight / 2 + activeButton.offsetHeight / 2;
+      activeItem.offsetTop - this.list.clientHeight / 2 + activeItem.offsetHeight / 2;
     this.list.scrollTop = Math.max(0, nextScrollTop);
     window.requestAnimationFrame(() => this.positionActiveDot());
+  }
+
+  private getActiveListItem(): HTMLElement | null {
+    if (!this.list) {
+      return null;
+    }
+
+    return (
+      this.list.querySelector<HTMLElement>(".gpt-reader-heading.is-active") ??
+      this.list.querySelector<HTMLElement>(".gpt-reader-answer.is-current .gpt-reader-answer-title")
+    );
   }
 
   private scrollToHeading(headingId: string | undefined): void {
@@ -586,6 +608,7 @@ class ChatGptReader {
       this.expandedAnswerIds.add(answerId);
     }
 
+    this.suppressActiveSyncUntil = performance.now() + CLICK_SCROLL_SYNC_PAUSE_MS;
     this.renderList();
   }
 
