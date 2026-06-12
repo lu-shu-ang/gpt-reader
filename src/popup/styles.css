@@ -1,0 +1,181 @@
+:root {
+  color: #171717;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    "Microsoft YaHei",
+    sans-serif;
+  font-size: 14px;
+}
+
+body {
+  background: #fff;
+  margin: 0;
+  min-width: 316px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.popup-shell {
+  padding: 16px;
+}
+
+header {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+header p {
+  color: #777;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.switch {
+  display: inline-flex;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+}
+
+.switch span {
+  background: #ddd;
+  border-radius: 999px;
+  cursor: pointer;
+  display: block;
+  height: 24px;
+  position: relative;
+  transition: background 140ms ease;
+  width: 42px;
+}
+
+.switch span::after {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  content: "";
+  height: 20px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 140ms ease;
+  width: 20px;
+}
+
+.switch input:checked + span {
+  background: #10a37f;
+}
+
+.switch input:checked + span::after {
+  transform: translateX(18px);
+}
+
+.panel {
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.field,
+.check-row {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+}
+
+.field + .check-row {
+  border-top: 1px solid #ececec;
+}
+
+strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+small {
+  color: #777;
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.depth-grid {
+  background: #f4f4f4;
+  border-radius: 7px;
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(6, 1fr);
+  padding: 2px;
+}
+
+.depth-grid button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #666;
+  cursor: pointer;
+  height: 30px;
+}
+
+.depth-grid button:hover {
+  background: #ececec;
+  color: #111;
+}
+
+.depth-grid button.is-active {
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
+  color: #111;
+  font-weight: 700;
+}
+
+.check-row {
+  align-items: center;
+  grid-template-columns: 1fr auto;
+}
+
+.check-row input {
+  accent-color: #10a37f;
+  height: 18px;
+  width: 18px;
+}
+
+footer {
+  align-items: center;
+  color: #777;
+  display: flex;
+  font-size: 12px;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.status-dot {
+  background: #10a37f;
+  border-radius: 999px;
+  display: inline-block;
+  height: 7px;
+  width: 7px;
+}

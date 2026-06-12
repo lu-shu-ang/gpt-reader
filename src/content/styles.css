@@ -1,0 +1,409 @@
+#gpt-reader-root {
+  color-scheme: light;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    "Microsoft YaHei",
+    sans-serif;
+  position: fixed;
+  z-index: 2147483000;
+  left: var(--gpt-reader-left, max(18px, calc((100vw - 1180px) / 2 - 314px)));
+  top: var(--gpt-reader-top, 82px);
+  width: var(--gpt-reader-width, 296px);
+  pointer-events: none;
+}
+
+#gpt-reader-root * {
+  box-sizing: border-box;
+}
+
+.gpt-reader-panel {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
+  color: #171717;
+  max-height: calc(100vh - 112px);
+  overflow: hidden;
+  pointer-events: auto;
+  position: relative;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.gpt-reader-header {
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  cursor: grab;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px 12px 10px;
+}
+
+#gpt-reader-root.is-dragging .gpt-reader-header {
+  cursor: grabbing;
+}
+
+.gpt-reader-header strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.gpt-reader-header span,
+.gpt-reader-settings p,
+.gpt-reader-empty {
+  color: #8a8a8a;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.gpt-reader-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.gpt-reader-icon-button,
+.gpt-reader-depths button,
+.gpt-reader-answer-title button,
+.gpt-reader-heading,
+.gpt-reader-float {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.gpt-reader-icon-button {
+  background: #f4f4f4;
+  border-radius: 6px;
+  color: #5c5c5c;
+  font-size: 12px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+.gpt-reader-icon-button:hover,
+.gpt-reader-depths button:hover,
+.gpt-reader-heading:hover {
+  background: #ededed;
+  color: #111;
+}
+
+.gpt-reader-settings {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 10px 12px 12px;
+}
+
+.gpt-reader-settings[hidden] {
+  display: none;
+}
+
+.gpt-reader-switch {
+  align-items: center;
+  color: #333;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0 0 10px;
+}
+
+.gpt-reader-switch input {
+  accent-color: #10a37f;
+}
+
+.gpt-reader-field {
+  color: #333;
+  display: grid;
+  font-size: 13px;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.gpt-reader-depths {
+  background: #f5f5f5;
+  border-radius: 7px;
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(6, 1fr);
+  padding: 2px;
+}
+
+.gpt-reader-depths button {
+  background: transparent;
+  border-radius: 5px;
+  color: #686868;
+  height: 26px;
+}
+
+.gpt-reader-depths button.is-active {
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
+  color: #111;
+  font-weight: 650;
+}
+
+.gpt-reader-body {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  max-height: min(660px, calc(100vh - 216px));
+  overflow: hidden;
+  padding: 10px 8px 12px 10px;
+}
+
+.gpt-reader-rail {
+  background: #ececec;
+  border-radius: 999px;
+  margin: 4px auto 0;
+  position: relative;
+  width: 2px;
+}
+
+.gpt-reader-rail span {
+  background: #10a37f;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(16, 163, 127, 0.12);
+  display: block;
+  height: 7px;
+  left: 50%;
+  opacity: 0;
+  position: absolute;
+  top: -4px;
+  transform: translateY(0);
+  transition:
+    opacity 120ms ease,
+    transform 80ms ease;
+  width: 7px;
+  margin-left: -3.5px;
+}
+
+[data-gpt-reader-list] {
+  max-height: inherit;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.gpt-reader-answer + .gpt-reader-answer {
+  margin-top: 10px;
+}
+
+.gpt-reader-answer {
+  border-left: 2px solid transparent;
+  border-radius: 7px;
+  padding: 4px 4px 6px 6px;
+}
+
+.gpt-reader-answer.is-current {
+  background: rgba(16, 163, 127, 0.045);
+  border-left-color: #10a37f;
+}
+
+.gpt-reader-answer:not(.is-current) {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.gpt-reader-answer-title {
+  align-items: center;
+  background: #f7f7f7;
+  border-radius: 6px;
+  color: #787878;
+  display: flex;
+  font-size: 11px;
+  gap: 6px;
+  justify-content: space-between;
+  margin: 0 0 4px;
+  padding: 4px 7px;
+}
+
+.gpt-reader-answer-title button {
+  align-items: center;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  flex: 1;
+  font-size: inherit;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.gpt-reader-answer-title button:disabled {
+  cursor: default;
+}
+
+.gpt-reader-answer-title button span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gpt-reader-answer-title.is-collapsed {
+  margin-bottom: 0;
+}
+
+.gpt-reader-answer-title.is-collapsed:hover {
+  background: #eeeeee;
+  color: #333;
+}
+
+.gpt-reader-answer-caret {
+  color: #9b9b9b;
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1;
+  width: 10px;
+}
+
+.gpt-reader-answer.is-current .gpt-reader-answer-title {
+  background: rgba(16, 163, 127, 0.1);
+  color: #0f7f64;
+}
+
+.gpt-reader-answer-title em {
+  background: rgba(16, 163, 127, 0.1);
+  border-radius: 999px;
+  color: #0f7f64;
+  font-style: normal;
+  font-weight: 650;
+  padding: 1px 6px;
+}
+
+.gpt-reader-heading {
+  align-items: center;
+  background: transparent;
+  border-radius: 6px;
+  color: #5f5f5f;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  line-height: 1.3;
+  margin: 1px 0;
+  min-height: 26px;
+  padding: 4px 7px 4px calc(7px + var(--toc-indent, 0px));
+  text-align: left;
+  width: 100%;
+}
+
+.gpt-reader-heading span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gpt-reader-heading-depth {
+  color: #b0b0b0;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.gpt-reader-heading.is-active {
+  background: rgba(16, 163, 127, 0.18);
+  box-shadow: inset 2px 0 0 #0c8f70;
+  color: #073b31;
+  font-weight: 650;
+}
+
+.gpt-reader-empty {
+  padding: 8px 6px 12px;
+}
+
+.gpt-reader-float {
+  background: rgba(16, 163, 127, 0.12);
+  border: 1px solid rgba(16, 163, 127, 0.28);
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(16, 163, 127, 0.14);
+  color: #0f7f64;
+  display: none;
+  font-size: 13px;
+  height: 36px;
+  padding: 0 13px;
+  pointer-events: auto;
+  position: absolute;
+  right: 66px;
+  top: 10px;
+}
+
+.gpt-reader-float:hover {
+  background: rgba(16, 163, 127, 0.18);
+  border-color: rgba(16, 163, 127, 0.42);
+  color: #073b31;
+}
+
+.gpt-reader-resize-handle {
+  bottom: 0;
+  cursor: ew-resize;
+  position: absolute;
+  right: -4px;
+  top: 0;
+  width: 8px;
+}
+
+.gpt-reader-resize-handle::after {
+  background: rgba(16, 163, 127, 0.28);
+  border-radius: 999px;
+  bottom: 14px;
+  content: "";
+  opacity: 0;
+  position: absolute;
+  right: 3px;
+  top: 14px;
+  transition: opacity 120ms ease;
+  width: 2px;
+}
+
+.gpt-reader-resize-handle:hover::after,
+#gpt-reader-root.is-resizing .gpt-reader-resize-handle::after {
+  opacity: 1;
+}
+
+#gpt-reader-root.is-resizing,
+#gpt-reader-root.is-dragging {
+  user-select: none;
+}
+
+#gpt-reader-root.is-collapsed .gpt-reader-panel {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-12px);
+}
+
+#gpt-reader-root.is-collapsed .gpt-reader-float {
+  display: inline-flex;
+  align-items: center;
+}
+
+#gpt-reader-root.is-disabled .gpt-reader-panel,
+#gpt-reader-root.is-disabled .gpt-reader-float {
+  display: none;
+}
+
+@media (max-width: 1280px) {
+  #gpt-reader-root {
+    left: 16px;
+    top: auto;
+    bottom: 18px;
+    width: auto;
+  }
+
+  .gpt-reader-panel {
+    display: none;
+  }
+
+  .gpt-reader-float {
+    display: inline-flex;
+    align-items: center;
+    position: static;
+  }
+}
