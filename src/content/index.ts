@@ -183,7 +183,7 @@ class ChatGptReader {
       }
 
       if (answerToggle) {
-        this.toggleAnswer(answerToggle.dataset.gptReaderAnswer);
+        this.toggleAnswer(answerToggle.dataset.gptReaderAnswerId);
         return;
       }
 
@@ -424,7 +424,7 @@ class ChatGptReader {
       header.className = "gpt-reader-answer-title";
       header.classList.toggle("is-collapsed", !isExpanded);
       header.innerHTML = `
-        <button type="button" data-gpt-reader-answer-toggle="${escapeText(outline.id)}" aria-expanded="${isExpanded}">
+        <button type="button" data-gpt-reader-answer-toggle data-gpt-reader-answer-id="${escapeText(outline.id)}" aria-expanded="${isExpanded}">
           <span class="gpt-reader-answer-caret" aria-hidden="true">${isExpanded ? "v" : ">"}</span>
           <span>${escapeText(`回答 ${outlineIndex + 1}`)}</span>
         </button>
