@@ -80,4 +80,42 @@ describe("heading outline extraction", () => {
     expect(currentAnswerVisible.map((heading) => heading.relativeDepth)).toEqual([1, 2]);
     expect(otherAnswerVisible.map((heading) => heading.text)).toEqual(["回答二顶层"]);
   });
+
+  it("rewrites stale DOM ids so heading targets stay unique after rescans", () => {
+    const outlines = extractAnswerOutlines(
+      renderAnswers(`
+        <article data-message-author-role="assistant" data-gpt-reader-answer-id="old-answer">
+          <h1 data-gpt-reader-heading-id="old-heading">旧回答标题</h1>
+        </article>
+        <article data-message-author-role="assistant" data-gpt-reader-answer-id="old-answer">
+          <h1 data-gpt-reader-heading-id="old-heading">新回答标题</h1>
+        </article>
+      `)
+    );
+
+    expect(outlines.map((outline) => outline.id)).toEqual([
+      "gpt-reader-answer-1",
+      "gpt-reader-answer-2"
+    ]);
+    expect(outlines.flatMap((outline) => outline.headings.map((heading) => heading.id))).toEqual([
+      "gpt-reader-heading-1-1",
+      "gpt-reader-heading-2-1"
+    ]);
+  });
+
+  it("ignores headings hidden by an ancestor", () => {
+    const outlines = extractAnswerOutlines(
+      renderAnswers(`
+        <article data-message-author-role="assistant" style="display: none">
+          <h1>Hidden parent heading</h1>
+        </article>
+        <article data-message-author-role="assistant">
+          <h1>Visible heading</h1>
+        </article>
+      `)
+    );
+
+    expect(outlines).toHaveLength(1);
+    expect(outlines[0].headings.map((heading) => heading.text)).toEqual(["Visible heading"]);
+  });
 });

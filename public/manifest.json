@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GPT Reader",
   "description": "Add a synchronized Markdown outline to long ChatGPT answers.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "permissions": ["storage"],
   "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
   "icons": {

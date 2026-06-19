@@ -19,15 +19,25 @@ import {
 
 const ROOT_ID = "gpt-reader-root";
 const ASSISTANT_SELECTOR = "[data-message-author-role='assistant']";
+const MESSAGE_SELECTOR =
+  "[data-message-author-role='user'],[data-message-author-role='assistant']";
+const TURN_SELECTOR = "[data-testid^='conversation-turn-'],article";
+const HIDDEN_ROUND_ATTR = "data-gpt-reader-hidden-round";
+const ROUND_LIMIT_BANNER_ID = "gpt-reader-round-limit-banner";
 const WIDTH_STORAGE_KEY = "gptReaderPanelWidth";
 const POSITION_STORAGE_KEY = "gptReaderPanelPosition";
+const HEIGHT_STORAGE_KEY = "gptReaderPanelHeight";
 const UI_STORAGE_KEY = "gptReaderUiState";
 const DEFAULT_PANEL_WIDTH = 296;
 const MIN_PANEL_WIDTH = 260;
 const MAX_PANEL_WIDTH = 440;
+const DEFAULT_PANEL_HEIGHT = 680;
+const MIN_PANEL_HEIGHT = 320;
 const SCAN_DEBOUNCE_MS = 120;
 const ACTIVE_ANCHOR_RATIO = 0.48;
-const CLICK_SCROLL_SYNC_PAUSE_MS = 350;
+const CLICK_SCROLL_SYNC_PAUSE_MS = 650;
+const TOC_FOLLOW_MARGIN_RATIO = 0.22;
+const TOC_FOLLOW_TARGET_RATIO = 0.44;
 
 type PanelPosition = {
   left: number;
@@ -36,7 +46,12 @@ type PanelPosition = {
 
 type PanelUiState = {
   width?: number;
+  height?: number;
   position?: PanelPosition | null;
+};
+
+type ConversationRound = {
+  containers: HTMLElement[];
 };
 
 const escapeText = (value: string): string =>
@@ -59,6 +74,8 @@ class ChatGptReader {
   private outlines: AnswerOutline[] = [];
   private allHeadings: HeadingInfo[] = [];
   private focusHeadings: HeadingInfo[] = [];
+  private hiddenRoundContainers = new Set<HTMLElement>();
+  private pageScrollContainers = new Set<HTMLElement>();
   private expandedAnswerIds = new Set<string>();
   private collapsedAnswerIds = new Set<string>();
   private currentHeadingId: string | null = null;
@@ -67,14 +84,18 @@ class ChatGptReader {
   private scanTimer: number | null = null;
   private activeFrame: number | null = null;
   private panelWidth = DEFAULT_PANEL_WIDTH;
+  private panelHeight = DEFAULT_PANEL_HEIGHT;
   private panelPosition: PanelPosition | null = null;
   private resizeStartX = 0;
   private resizeStartWidth = DEFAULT_PANEL_WIDTH;
+  private resizeStartY = 0;
+  private resizeStartHeight = DEFAULT_PANEL_HEIGHT;
   private dragStartX = 0;
   private dragStartY = 0;
   private dragStartLeft = 0;
   private dragStartTop = 0;
   private isResizing = false;
+  private isResizingHeight = false;
   private isDragging = false;
   private suppressActiveSyncUntil = 0;
   private collapsed = false;
@@ -104,6 +125,7 @@ class ChatGptReader {
       this.list = existing.querySelector<HTMLElement>("[data-gpt-reader-list]");
       this.activeDot = existing.querySelector<HTMLElement>("[data-gpt-reader-active-dot]");
       this.applyPanelWidth();
+      this.applyPanelHeight();
       this.applyPanelPosition();
       return;
     }
@@ -135,6 +157,11 @@ class ChatGptReader {
             <input type="checkbox" data-gpt-reader-expand-current />
             <span>只展开当前回答</span>
           </label>
+          <label class="gpt-reader-field">
+            <span>保留最近问答轮数</span>
+            <input type="number" min="0" max="50" step="1" data-gpt-reader-max-rounds />
+            <p>0 表示不限制；长会话建议 3-5 轮。</p>
+          </label>
           <p>其他回答默认折叠，可点击回答标题展开</p>
         </form>
         <div class="gpt-reader-body">
@@ -144,6 +171,7 @@ class ChatGptReader {
           <nav data-gpt-reader-list></nav>
         </div>
         <div class="gpt-reader-resize-handle" data-gpt-reader-resize title="拖拽调整目录宽度" aria-hidden="true"></div>
+        <div class="gpt-reader-resize-height-handle" data-gpt-reader-resize-height title="拖拽调整目录高度" aria-hidden="true"></div>
       </section>
       <button type="button" class="gpt-reader-float" data-gpt-reader-float>目录</button>
     `;
@@ -153,6 +181,7 @@ class ChatGptReader {
     this.list = root.querySelector<HTMLElement>("[data-gpt-reader-list]");
     this.activeDot = root.querySelector<HTMLElement>("[data-gpt-reader-active-dot]");
     this.applyPanelWidth();
+    this.applyPanelHeight();
     this.applyPanelPosition();
   }
 
@@ -163,6 +192,11 @@ class ChatGptReader {
       const target = event.target as HTMLElement;
       if (target.closest("[data-gpt-reader-resize]")) {
         this.startResize(event);
+        return;
+      }
+
+      if (target.closest("[data-gpt-reader-resize-height]")) {
+        this.startHeightResize(event);
         return;
       }
 
@@ -181,7 +215,10 @@ class ChatGptReader {
       const answerToggle = target.closest<HTMLButtonElement>("[data-gpt-reader-answer-toggle]");
 
       if (headingButton) {
-        this.scrollToHeading(headingButton.dataset.gptReaderHeading);
+        this.scrollToHeading(
+          headingButton.dataset.gptReaderHeading,
+          headingButton.dataset.gptReaderAnswerId
+        );
         return;
       }
 
@@ -222,6 +259,10 @@ class ChatGptReader {
       if (target.matches("[data-gpt-reader-expand-current]")) {
         void this.updateSettings({ expandCurrentOnly: target.checked });
       }
+
+      if (target.matches("[data-gpt-reader-max-rounds]")) {
+        void this.updateSettings({ maxVisibleRounds: this.parseRoundLimit(target.value) });
+      }
     });
   }
 
@@ -245,14 +286,7 @@ class ChatGptReader {
     this.unsubscribeSettings?.();
     this.unsubscribeSettings = subscribeSettings((settings) => {
       this.settings = settings;
-      this.refreshHeadingCaches();
-      const activeHeading = this.findActiveHeadingFromScroll();
-      if (activeHeading) {
-        this.currentHeadingId = activeHeading.id;
-        this.currentAnswerId = activeHeading.answerId;
-      }
-      this.render();
-      this.queueActiveUpdate();
+      this.scan();
     });
   }
 
@@ -268,7 +302,11 @@ class ChatGptReader {
   };
 
   private scan(): void {
-    const answerElements = Array.from(document.querySelectorAll<HTMLElement>(ASSISTANT_SELECTOR));
+    this.applyRoundLimit();
+    const answerElements = Array.from(document.querySelectorAll<HTMLElement>(ASSISTANT_SELECTOR)).filter(
+      (element) => !element.closest(`[${HIDDEN_ROUND_ATTR}="true"]`)
+    );
+    this.refreshPageScrollListeners(answerElements);
     this.outlines = extractAnswerOutlines(answerElements);
     this.expandedAnswerIds = new Set(
       [...this.expandedAnswerIds].filter((answerId) =>
@@ -314,6 +352,48 @@ class ChatGptReader {
     this.queueActiveUpdate();
   };
 
+  private refreshPageScrollListeners(answerElements: HTMLElement[]): void {
+    const nextContainers = new Set<HTMLElement>();
+
+    for (const answerElement of answerElements) {
+      let current = answerElement.parentElement;
+      while (current && current !== document.body) {
+        if (this.isPageScrollContainer(current)) {
+          nextContainers.add(current);
+        }
+
+        current = current.parentElement;
+      }
+    }
+
+    for (const container of this.pageScrollContainers) {
+      if (!nextContainers.has(container)) {
+        container.removeEventListener("scroll", this.queueActiveUpdate);
+      }
+    }
+
+    for (const container of nextContainers) {
+      if (!this.pageScrollContainers.has(container)) {
+        container.addEventListener("scroll", this.queueActiveUpdate, { passive: true });
+      }
+    }
+
+    this.pageScrollContainers = nextContainers;
+  }
+
+  private isPageScrollContainer(element: HTMLElement): boolean {
+    if (this.root?.contains(element)) {
+      return false;
+    }
+
+    const style = getComputedStyle(element);
+    if (!/(auto|scroll|overlay)/.test(style.overflowY)) {
+      return false;
+    }
+
+    return element.scrollHeight > element.clientHeight + 20;
+  }
+
   private updateActiveFromScroll(): void {
     if (performance.now() < this.suppressActiveSyncUntil) {
       this.positionActiveDot();
@@ -345,6 +425,7 @@ class ChatGptReader {
       }
     }
 
+    this.keepActiveHeadingInView();
     this.positionActiveDot();
   }
 
@@ -370,6 +451,13 @@ class ChatGptReader {
     const expandInput = this.root.querySelector<HTMLInputElement>("[data-gpt-reader-expand-current]");
     if (expandInput) {
       expandInput.checked = this.settings.expandCurrentOnly;
+    }
+
+    const maxRoundsInput = this.root.querySelector<HTMLInputElement>(
+      "[data-gpt-reader-max-rounds]"
+    );
+    if (maxRoundsInput) {
+      maxRoundsInput.value = String(this.settings.maxVisibleRounds);
     }
 
     const count = this.root.querySelector<HTMLElement>("[data-gpt-reader-count]");
@@ -456,6 +544,7 @@ class ChatGptReader {
         button.type = "button";
         button.className = "gpt-reader-heading";
         button.dataset.gptReaderHeading = heading.id;
+        button.dataset.gptReaderAnswerId = heading.answerId;
         button.classList.toggle("is-active", heading.id === this.currentHeadingId);
         button.style.setProperty(
           "--toc-indent",
@@ -474,7 +563,7 @@ class ChatGptReader {
 
     this.list.replaceChildren(fragment);
     this.positionActiveDot();
-    this.centerActiveHeading();
+    this.keepActiveHeadingInView();
   }
 
   private syncActiveHeading(previousHeadingId: string | null): void {
@@ -496,7 +585,7 @@ class ChatGptReader {
       currentButton?.classList.add("is-active");
     }
 
-    this.centerActiveHeading();
+    this.keepActiveHeadingInView();
   }
 
   private positionActiveDot(): void {
@@ -512,12 +601,15 @@ class ChatGptReader {
 
     const listRect = this.list.getBoundingClientRect();
     const activeRect = activeItem.getBoundingClientRect();
-    const top = Math.max(6, activeRect.top - listRect.top + activeRect.height / 2);
+    const top = Math.min(
+      Math.max(6, this.list.clientHeight - 6),
+      Math.max(6, activeRect.top - listRect.top + activeRect.height / 2)
+    );
     this.activeDot.style.opacity = "1";
     this.activeDot.style.transform = `translateY(${top}px)`;
   }
 
-  private centerActiveHeading(): void {
+  private keepActiveHeadingInView(): void {
     if (!this.list) {
       return;
     }
@@ -527,9 +619,28 @@ class ChatGptReader {
       return;
     }
 
-    const nextScrollTop =
-      activeItem.offsetTop - this.list.clientHeight / 2 + activeItem.offsetHeight / 2;
-    this.list.scrollTop = Math.max(0, nextScrollTop);
+    const listRect = this.list.getBoundingClientRect();
+    const activeRect = activeItem.getBoundingClientRect();
+    const activeCenter = activeRect.top - listRect.top + activeRect.height / 2;
+    const topGuard = this.list.clientHeight * TOC_FOLLOW_MARGIN_RATIO;
+    const bottomGuard = this.list.clientHeight * (1 - TOC_FOLLOW_MARGIN_RATIO);
+
+    if (activeCenter >= topGuard && activeCenter <= bottomGuard) {
+      window.requestAnimationFrame(() => this.positionActiveDot());
+      return;
+    }
+
+    const maxScrollTop = Math.max(0, this.list.scrollHeight - this.list.clientHeight);
+    const targetOffset = this.list.clientHeight * TOC_FOLLOW_TARGET_RATIO;
+    const nextScrollTop = Math.min(
+      maxScrollTop,
+      Math.max(0, this.list.scrollTop + activeCenter - targetOffset)
+    );
+
+    if (Math.abs(nextScrollTop - this.list.scrollTop) > 0.5) {
+      this.list.scrollTop = nextScrollTop;
+    }
+
     window.requestAnimationFrame(() => this.positionActiveDot());
   }
 
@@ -544,12 +655,14 @@ class ChatGptReader {
     );
   }
 
-  private scrollToHeading(headingId: string | undefined): void {
+  private scrollToHeading(headingId: string | undefined, answerId: string | undefined): void {
     if (!headingId) {
       return;
     }
 
-    const heading = this.allHeadings.find((item) => item.id === headingId);
+    const heading = this.allHeadings.find(
+      (item) => item.id === headingId && (!answerId || item.answerId === answerId)
+    );
     if (!heading) {
       return;
     }
@@ -575,14 +688,150 @@ class ChatGptReader {
 
   private async updateSettings(patch: Partial<TocSettings>): Promise<void> {
     this.settings = mergeSettings(this.settings, patch);
-    this.refreshHeadingCaches();
-    const activeHeading = this.findActiveHeadingFromScroll();
-    if (activeHeading) {
-      this.currentHeadingId = activeHeading.id;
-      this.currentAnswerId = activeHeading.answerId;
-    }
-    this.render();
+    this.scan();
     await saveSettings(this.settings);
+  }
+
+  private parseRoundLimit(value: string): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+
+    return Math.min(50, Math.max(0, Math.trunc(parsed)));
+  }
+
+  private applyRoundLimit(): void {
+    this.restoreHiddenRounds();
+
+    if (!this.settings.enabled || this.settings.maxVisibleRounds <= 0) {
+      this.removeRoundLimitBanner();
+      return;
+    }
+
+    const rounds = this.getConversationRounds();
+    if (rounds.length <= this.settings.maxVisibleRounds) {
+      this.removeRoundLimitBanner();
+      return;
+    }
+
+    const hiddenRounds = rounds.slice(0, -this.settings.maxVisibleRounds);
+    const visibleRounds = rounds.slice(-this.settings.maxVisibleRounds);
+    const firstVisibleContainer = visibleRounds[0]?.containers[0];
+
+    for (const round of hiddenRounds) {
+      for (const container of round.containers) {
+        this.hideRoundContainer(container);
+      }
+    }
+
+    this.hidePreviousSiblingsBefore(firstVisibleContainer);
+    this.insertRoundLimitBanner(firstVisibleContainer);
+  }
+
+  private hidePreviousSiblingsBefore(anchor: HTMLElement | undefined): void {
+    if (!anchor?.parentElement) {
+      return;
+    }
+
+    let sibling = anchor.previousElementSibling as HTMLElement | null;
+    while (sibling) {
+      const previousSibling = sibling.previousElementSibling as HTMLElement | null;
+      this.hideRoundContainer(sibling);
+      sibling = previousSibling;
+    }
+  }
+
+  private hideRoundContainer(container: HTMLElement): void {
+    if (
+      container.id === ROOT_ID ||
+      container.id === ROUND_LIMIT_BANNER_ID ||
+      this.root?.contains(container) ||
+      this.hiddenRoundContainers.has(container)
+    ) {
+      return;
+    }
+
+    container.dataset.gptReaderPreviousDisplay = container.style.getPropertyValue("display");
+    container.dataset.gptReaderPreviousDisplayPriority =
+      container.style.getPropertyPriority("display");
+    container.setAttribute(HIDDEN_ROUND_ATTR, "true");
+    container.style.setProperty("display", "none", "important");
+    this.hiddenRoundContainers.add(container);
+  }
+
+  private restoreHiddenRounds(): void {
+    for (const container of this.hiddenRoundContainers) {
+      const previousDisplay = container.dataset.gptReaderPreviousDisplay ?? "";
+      const previousPriority = container.dataset.gptReaderPreviousDisplayPriority ?? "";
+      container.style.setProperty("display", previousDisplay, previousPriority);
+      delete container.dataset.gptReaderPreviousDisplay;
+      delete container.dataset.gptReaderPreviousDisplayPriority;
+      container.removeAttribute(HIDDEN_ROUND_ATTR);
+    }
+
+    this.hiddenRoundContainers.clear();
+  }
+
+  private getConversationRounds(): ConversationRound[] {
+    const rounds: ConversationRound[] = [];
+    let currentRound: ConversationRound | null = null;
+
+    const messages = Array.from(document.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR));
+    for (const message of messages) {
+      if (this.root?.contains(message)) {
+        continue;
+      }
+
+      const role = message.dataset.messageAuthorRole;
+      const container = this.getMessageContainer(message);
+      if (!container || container.id === ROUND_LIMIT_BANNER_ID) {
+        continue;
+      }
+
+      if (role === "user" || !currentRound) {
+        currentRound = { containers: [] };
+        rounds.push(currentRound);
+      }
+
+      if (!currentRound.containers.includes(container)) {
+        currentRound.containers.push(container);
+      }
+    }
+
+    return rounds.filter((round) => round.containers.length > 0);
+  }
+
+  private getMessageContainer(message: HTMLElement): HTMLElement {
+    return message.closest<HTMLElement>(TURN_SELECTOR) ?? message;
+  }
+
+  private insertRoundLimitBanner(anchor: HTMLElement | undefined): void {
+    if (!anchor?.parentElement) {
+      this.removeRoundLimitBanner();
+      return;
+    }
+
+    const banner = this.getOrCreateRoundLimitBanner();
+    if (banner.parentElement !== anchor.parentElement || banner.nextElementSibling !== anchor) {
+      anchor.parentElement.insertBefore(banner, anchor);
+    }
+  }
+
+  private getOrCreateRoundLimitBanner(): HTMLElement {
+    const existing = document.getElementById(ROUND_LIMIT_BANNER_ID);
+    if (existing) {
+      return existing;
+    }
+
+    const banner = document.createElement("div");
+    banner.id = ROUND_LIMIT_BANNER_ID;
+    banner.textContent = "旧消息已从当前视图隐藏，调为 0 可恢复显示";
+    return banner;
+  }
+
+  private removeRoundLimitBanner(): void {
+    document.getElementById(ROUND_LIMIT_BANNER_ID)?.remove();
   }
 
   private toggleAnswer(answerId: string | undefined): void {
@@ -624,14 +873,17 @@ class ChatGptReader {
   }
 
   private findActiveHeadingFromScroll(): HeadingInfo | null {
-    if (this.focusHeadings.length === 0) {
+    const visibleHeadings = this.focusHeadings.filter((heading) =>
+      this.isHeadingRenderable(heading.element)
+    );
+    if (visibleHeadings.length === 0) {
       return null;
     }
 
     const anchorY = Math.round(window.innerHeight * ACTIVE_ANCHOR_RATIO);
-    let activeHeading = this.focusHeadings[0];
+    let activeHeading = visibleHeadings[0];
 
-    for (const heading of this.focusHeadings) {
+    for (const heading of visibleHeadings) {
       if (heading.element.getBoundingClientRect().top <= anchorY) {
         activeHeading = heading;
       } else {
@@ -642,17 +894,46 @@ class ChatGptReader {
     return activeHeading;
   }
 
+  private isHeadingRenderable(element: HTMLElement): boolean {
+    if (!element.isConnected || element.closest(`[${HIDDEN_ROUND_ATTR}="true"]`)) {
+      return false;
+    }
+
+    const rects = element.getClientRects();
+    if (rects.length === 0) {
+      return false;
+    }
+
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 || rect.height > 0;
+  }
+
   private async loadPanelUiState(): Promise<void> {
     const storedState = await this.readStoredPanelUiState();
-    const legacyWidth = Number(window.localStorage.getItem(WIDTH_STORAGE_KEY));
+    const legacyWidth = this.readStoredNumber(window.localStorage.getItem(WIDTH_STORAGE_KEY));
+    const legacyHeight = this.readStoredNumber(window.localStorage.getItem(HEIGHT_STORAGE_KEY));
     const legacyPosition = this.readLegacyPanelPosition();
-    const width = Number(storedState.width ?? legacyWidth);
+    const width = this.readStoredNumber(storedState.width) ?? legacyWidth;
+    const height = this.readStoredNumber(storedState.height) ?? legacyHeight;
 
-    if (Number.isFinite(width)) {
+    if (width !== undefined) {
       this.panelWidth = this.constrainPanelWidth(width);
     }
 
     this.panelPosition = storedState.position ?? legacyPosition;
+
+    if (height !== undefined) {
+      this.panelHeight = this.constrainPanelHeight(height);
+    }
+  }
+
+  private readStoredNumber(value: unknown): number | undefined {
+    if (value === null || value === undefined || value === "") {
+      return undefined;
+    }
+
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : undefined;
   }
 
   private async readStoredPanelUiState(): Promise<PanelUiState> {
@@ -672,10 +953,12 @@ class ChatGptReader {
   private async savePanelUiState(): Promise<void> {
     const state: PanelUiState = {
       width: Math.round(this.panelWidth),
+      height: Math.round(this.panelHeight),
       position: this.panelPosition
     };
 
     window.localStorage.setItem(WIDTH_STORAGE_KEY, String(state.width));
+    window.localStorage.setItem(HEIGHT_STORAGE_KEY, String(state.height));
     if (state.position) {
       window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(state.position));
     }
@@ -697,6 +980,16 @@ class ChatGptReader {
 
   private applyPanelWidth(): void {
     this.root?.style.setProperty("--gpt-reader-width", `${this.panelWidth}px`);
+  }
+
+  private constrainPanelHeight(height: number): number {
+    const top = this.panelPosition?.top ?? this.root?.getBoundingClientRect().top ?? 82;
+    const maxHeight = Math.max(MIN_PANEL_HEIGHT, window.innerHeight - top - 8);
+    return Math.min(maxHeight, Math.max(MIN_PANEL_HEIGHT, height));
+  }
+
+  private applyPanelHeight(): void {
+    this.root?.style.setProperty("--gpt-reader-height", `${this.panelHeight}px`);
   }
 
   private readLegacyPanelPosition(): PanelPosition | null {
@@ -726,11 +1019,13 @@ class ChatGptReader {
 
     this.root.style.setProperty("--gpt-reader-left", `${this.panelPosition.left}px`);
     this.root.style.setProperty("--gpt-reader-top", `${this.panelPosition.top}px`);
+    this.panelHeight = this.constrainPanelHeight(this.panelHeight);
+    this.applyPanelHeight();
   }
 
   private constrainPanelPosition(left: number, top: number): PanelPosition {
     const width = this.panelWidth;
-    const panelHeight = this.root?.querySelector<HTMLElement>(".gpt-reader-panel")?.offsetHeight ?? 420;
+    const panelHeight = this.panelHeight;
     const maxLeft = Math.max(0, window.innerWidth - Math.min(width, window.innerWidth) - 8);
     const maxTop = Math.max(0, window.innerHeight - Math.min(panelHeight, window.innerHeight) - 8);
 
@@ -806,6 +1101,34 @@ class ChatGptReader {
     this.isResizing = false;
     this.root?.classList.remove("is-resizing");
     window.removeEventListener("pointermove", this.resizePanel);
+    void this.savePanelUiState();
+  };
+
+  private startHeightResize(event: PointerEvent): void {
+    event.preventDefault();
+    this.isResizingHeight = true;
+    this.resizeStartY = event.clientY;
+    this.resizeStartHeight = this.panelHeight;
+    this.root?.classList.add("is-resizing-height");
+    window.addEventListener("pointermove", this.resizePanelHeight);
+    window.addEventListener("pointerup", this.stopHeightResize, { once: true });
+  }
+
+  private resizePanelHeight = (event: PointerEvent): void => {
+    if (!this.isResizingHeight) {
+      return;
+    }
+
+    const nextHeight = this.resizeStartHeight + event.clientY - this.resizeStartY;
+    this.panelHeight = this.constrainPanelHeight(nextHeight);
+    this.applyPanelHeight();
+    this.positionActiveDot();
+  };
+
+  private stopHeightResize = (): void => {
+    this.isResizingHeight = false;
+    this.root?.classList.remove("is-resizing-height");
+    window.removeEventListener("pointermove", this.resizePanelHeight);
     void this.savePanelUiState();
   };
 }

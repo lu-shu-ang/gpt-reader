@@ -4,12 +4,14 @@ export type TocSettings = {
   enabled: boolean;
   maxDepth: HeadingDepth;
   expandCurrentOnly: boolean;
+  maxVisibleRounds: number;
 };
 
 export const DEFAULT_SETTINGS: TocSettings = {
   enabled: true,
   maxDepth: 2,
-  expandCurrentOnly: true
+  expandCurrentOnly: true,
+  maxVisibleRounds: 0
 };
 
 const SETTINGS_KEY = "gptReaderSettings";
@@ -24,6 +26,13 @@ const isDepth = (value: unknown): value is HeadingDepth =>
 
 const normalizeSettings = (value: unknown): TocSettings => {
   const input = typeof value === "object" && value !== null ? (value as SettingsPatch) : {};
+  const maxVisibleRounds =
+    typeof input.maxVisibleRounds === "number" &&
+    Number.isInteger(input.maxVisibleRounds) &&
+    input.maxVisibleRounds >= 0 &&
+    input.maxVisibleRounds <= 50
+      ? input.maxVisibleRounds
+      : DEFAULT_SETTINGS.maxVisibleRounds;
 
   return {
     enabled: typeof input.enabled === "boolean" ? input.enabled : DEFAULT_SETTINGS.enabled,
@@ -31,7 +40,8 @@ const normalizeSettings = (value: unknown): TocSettings => {
     expandCurrentOnly:
       typeof input.expandCurrentOnly === "boolean"
         ? input.expandCurrentOnly
-        : DEFAULT_SETTINGS.expandCurrentOnly
+        : DEFAULT_SETTINGS.expandCurrentOnly,
+    maxVisibleRounds
   };
 };
 

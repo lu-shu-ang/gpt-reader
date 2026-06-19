@@ -1,6 +1,6 @@
 {
   "name": "gpt-reader",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "description": "ChatGPT long-answer table of contents Chrome extension.",
   "private": true,
   "type": "module",

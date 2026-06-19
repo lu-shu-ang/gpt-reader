@@ -64,6 +64,21 @@ const render = (): void => {
             ${settings.expandCurrentOnly ? "checked" : ""}
           />
         </label>
+
+        <label class="field">
+          <div>
+            <strong>保留最近问答轮数</strong>
+            <small>0 表示不限制；长会话建议 3-5 轮。</small>
+          </div>
+          <input
+            type="number"
+            min="0"
+            max="50"
+            step="1"
+            data-setting-max-rounds
+            value="${settings.maxVisibleRounds}"
+          />
+        </label>
       </div>
 
       <footer>
@@ -105,6 +120,11 @@ const init = async (): Promise<void> => {
 
     if (target.matches("[data-setting-expand-current]")) {
       void updateSettings({ expandCurrentOnly: target.checked });
+    }
+
+    if (target.matches("[data-setting-max-rounds]")) {
+      const nextValue = Math.min(50, Math.max(0, Math.trunc(Number(target.value) || 0)));
+      void updateSettings({ maxVisibleRounds: nextValue });
     }
   });
 };

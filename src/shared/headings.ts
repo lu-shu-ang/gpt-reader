@@ -26,27 +26,47 @@ const getHeadingDepth = (element: Element): HeadingDepth | null => {
   return depth >= 1 && depth <= 6 ? (depth as HeadingDepth) : null;
 };
 
+const isJsdom = (element: HTMLElement): boolean =>
+  element.ownerDocument.defaultView?.navigator.userAgent.includes("jsdom") ?? false;
+
+const hasLayoutBox = (element: HTMLElement): boolean => {
+  if (isJsdom(element)) {
+    return true;
+  }
+
+  const rects = element.getClientRects();
+  if (rects.length === 0) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 || rect.height > 0;
+};
+
 const isVisibleHeading = (element: HTMLElement): boolean => {
   if (element.hidden || element.getAttribute("aria-hidden") === "true") {
     return false;
   }
 
-  const inlineDisplay = element.style.display;
-  const inlineVisibility = element.style.visibility;
-  if (inlineDisplay === "none" || inlineVisibility === "hidden") {
-    return false;
+  let current: HTMLElement | null = element;
+  while (current && current !== element.ownerDocument.body) {
+    if (current.hidden || current.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+
+    const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+    if (style?.display === "none" || style?.visibility === "hidden") {
+      return false;
+    }
+
+    current = current.parentElement;
   }
 
-  return true;
+  return hasLayoutBox(element);
 };
 
 const ensureAnswerId = (element: Element, answerIndex: number): string => {
   const htmlElement = element as HTMLElement;
-  const existingId = htmlElement.dataset.gptReaderAnswerId;
-  if (existingId) {
-    return existingId;
-  }
-
   const id = `gpt-reader-answer-${answerIndex + 1}`;
   htmlElement.dataset.gptReaderAnswerId = id;
   return id;
@@ -57,11 +77,6 @@ const ensureHeadingId = (
   answerIndex: number,
   headingIndex: number
 ): string => {
-  const existingId = heading.dataset.gptReaderHeadingId;
-  if (existingId) {
-    return existingId;
-  }
-
   const id = `gpt-reader-heading-${answerIndex + 1}-${headingIndex + 1}`;
   heading.dataset.gptReaderHeadingId = id;
   heading.style.scrollMarginTop = "96px";
